@@ -4,6 +4,13 @@ import CoreML
 
 // MARK: - Focus State
 
+struct CellAnchorKey: PreferenceKey {
+    static var defaultValue: Anchor<CGRect>? = nil
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = nextValue() ?? value
+    }
+}
+
 enum TableFocus: Hashable {
     case table
     case cell(row: Int, col: Int)
@@ -59,15 +66,15 @@ struct DropdownPopup: View {
                             onSelect(option)
                         }
                         .onHover { inside in
-                            if inside { highlighted = idx }
+                            guard inside else { return }
+                            DispatchQueue.main.async {
+                                if highlighted != idx {
+                                    highlighted = idx
+                                }
+                            }
                         }
                     }
                     
-                }
-            }
-            .onChange(of: highlighted) { newIdx in
-                withAnimation(.none) {
-                    proxy.scrollTo(newIdx, anchor: .center)
                 }
             }
             .onAppear {
@@ -183,12 +190,7 @@ struct ContentView: View {
                                    return handleTypingKey(press)
                                }
             
-            // ── Dropdown popup overlay ─────────────────────────────────────
-            if vm.dropdownOpen {
-                dropdownOverlay
-            }
         }
-        // Klik di luar dropdown → tutup
         .onTapGesture {
             if vm.dropdownOpen {
                 vm.closeDropdown()
@@ -204,6 +206,47 @@ struct ContentView: View {
             if case let .cell(row, col) = newFocus {
                 vm.selectedRow = row
                 vm.selectedCol = col
+            }
+        }
+        .overlayPreferenceValue(CellAnchorKey.self) { anchor in
+            if vm.dropdownOpen, let anchor {
+                GeometryReader { geo in
+                    let cellRect  = geo[anchor]
+                    let col       = vm.selectedCol
+                    let row       = vm.selectedRow
+                    let opts      = vm.dropdownOptions(col: col)
+                    let currVal   = row < vm.rows.count ? vm.rows[row].cells[col] : ""
+                    let popupW    = vm.columnDefs[col].width
+                    let popupH    = min(CGFloat(opts.count) * 28 + 16, 208)
+
+                    DropdownPopup(
+                        options: opts,
+                        highlighted: $vm.dropdownHighlighted,
+                        currentValue: currVal,
+                        onSelect: { value in
+                            vm.setValue(row: row, col: col, value: value)
+                            vm.closeDropdown()
+                            focus = .table
+                        },
+                        onDismiss: {
+                            vm.closeDropdown()
+                            focus = .table
+                        }
+                    )
+                    .frame(width: popupW)
+                    .position(
+                        x: cellRect.maxX + popupW / 2,   // kiri popup = kanan sel
+                        y: cellRect.minY + popupH / 2     // top popup = top sel
+                    )
+                    .zIndex(999)
+                    .onTapGesture {}
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    vm.closeDropdown()
+                    focus = .table
+                }
+                .zIndex(998)
             }
         }
     }
@@ -290,8 +333,6 @@ struct ContentView: View {
             }
         )
         .frame(width: popupWidth)
-        // ZStack pakai alignment: .topLeading → (0,0) = pojok kiri-atas.
-        // .offset memindahkan pojok kiri-atas popup ke (xRightOfCell, yTopOfCell).
         .offset(x: xRightOfCell, y: yTopOfCell)
         .zIndex(999)
         .onTapGesture { /* dikonsumsi oleh DropdownRow, jangan hapus */ }
@@ -463,7 +504,10 @@ struct ContentView: View {
         .frame(width: colDef.width, height: 32)// kalo ini dihapus widh di cell jadi normal, tapi jadi gak match width di column header dengan cell baris
         .contentShape(Rectangle()) // Agar seluruh area sel bisa di-klik
         .overlay(Rectangle().frame(width: 1)
-            .foregroundColor(Color(NSColor.separatorColor).opacity(0.5)), alignment: .trailing)
+        .foregroundColor(Color(NSColor.separatorColor).opacity(0.5)), alignment: .trailing)
+        .anchorPreference(key: CellAnchorKey.self, value: .bounds) { anchor in
+            (isSelected && vm.isDropdown(col: colIdx)) ? anchor : nil
+        }
         .onTapGesture {
             if !vm.isEditable(col: colIdx) {
                     return // 🚫 block total
