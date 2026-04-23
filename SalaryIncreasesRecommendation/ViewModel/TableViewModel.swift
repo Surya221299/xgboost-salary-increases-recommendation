@@ -14,6 +14,7 @@ class TableViewModel: ObservableObject {
     @Published var selectedCol: Int = 0
     @Published var isEditing: Bool = false
     @Published var editingText: String = ""
+    @Published var didCalculate: Bool = false
 
     // Dropdown state
     @Published var dropdownOpen: Bool = false
@@ -54,7 +55,7 @@ class TableViewModel: ObservableObject {
                   width: 130),
         ColumnDef(name: "Output",
                   type: .text,
-                  width: 120,
+                  width: 150,
                   isEditable: false),
     ]
 

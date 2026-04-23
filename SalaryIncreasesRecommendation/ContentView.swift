@@ -66,15 +66,20 @@ struct DropdownPopup: View {
                             onSelect(option)
                         }
                         .onHover { inside in
-                            guard inside else { return }
-                            DispatchQueue.main.async {
-                                if highlighted != idx {
+                            if inside {
                                     highlighted = idx
-                                }
+                                
                             }
                         }
                     }
                     
+                }
+            }
+            .onChange(of: highlighted) { newValue in
+                DispatchQueue.main.async {
+                    withAnimation(.easeInOut(duration: 0.1)) {
+                        proxy.scrollTo(newValue, anchor: .center)
+                    }
                 }
             }
             .onAppear {
@@ -218,7 +223,7 @@ struct ContentView: View {
                     let currVal   = row < vm.rows.count ? vm.rows[row].cells[col] : ""
                     let popupW    = vm.columnDefs[col].width
                     let popupH    = min(CGFloat(opts.count) * 28 + 16, 208)
-
+                    
                     DropdownPopup(
                         options: opts,
                         highlighted: $vm.dropdownHighlighted,
@@ -235,8 +240,8 @@ struct ContentView: View {
                     )
                     .frame(width: popupW)
                     .position(
-                        x: cellRect.maxX + popupW / 2,   // kiri popup = kanan sel
-                        y: cellRect.minY + popupH / 2     // top popup = top sel
+                        x: cellRect.maxX + popupW / 2,
+                        y: cellRect.minY + popupH / 2
                     )
                     .zIndex(999)
                     .onTapGesture {}
@@ -256,6 +261,7 @@ struct ContentView: View {
             let result = predictRow(vm.rows[i])
             vm.rows[i].cells[6] = result // kolom Output
         }
+        vm.didCalculate = true
     }
     
     func predictRow(_ row: TableRow) -> String {
@@ -293,31 +299,24 @@ struct ContentView: View {
     }
     
     // MARK: - Dropdown Overlay
-    // Posisi popup dihitung berdasarkan selected row & col
     var dropdownOverlay: some View {
         let col       = vm.selectedCol
         let row       = vm.selectedRow
         let opts      = vm.dropdownOptions(col: col)
         let currentVal = row < vm.rows.count ? vm.rows[row].cells[col] : ""
-
-        // Konstanta — sesuaikan dengan layout Anda
-        let headerBarH:    CGFloat = 41   // tinggi HStack headerBar
-        let columnHeaderH: CGFloat = 33   // tinggi HStack columnHeader
-        let rowH:          CGFloat = 32   // tinggi tiap baris (frame height)
-
-        // X = tepi KANAN cell aktif
-        //     = jumlah lebar kolom 0..<col  +  lebar col itu sendiri
+        
+        let headerBarH:    CGFloat = 41
+        let columnHeaderH: CGFloat = 33
+        let rowH:          CGFloat = 32
+        
         let xRightOfCell: CGFloat = (0..<col)
             .reduce(0) { $0 + vm.columnDefs[$1].width }
-            + vm.columnDefs[col].width
-
-        // Y = tepi ATAS cell aktif
-        //     = header + columnHeader + (baris ke-row × tinggi baris)
-        //     Catatan: row dimulai dari 0, TIDAK tambah 1
+        + vm.columnDefs[col].width
+        
         let yTopOfCell: CGFloat = headerBarH + columnHeaderH + CGFloat(row) * rowH
-
+        
         let popupWidth: CGFloat = vm.columnDefs[col].width
-
+        
         return DropdownPopup(
             options: opts,
             highlighted: $vm.dropdownHighlighted,
@@ -405,7 +404,6 @@ struct ContentView: View {
                 cellView(rowIdx: rowIdx, colIdx: colIdx, value: cell)
             }
         }
-        //.frame(maxWidth: .infinity, alignment: .leading) // Paksa isi ke kiri
         .background {
             if rowIdx == vm.selectedRow {
                 Color.accentColor.opacity(0.08)
@@ -431,15 +429,27 @@ struct ContentView: View {
         let colDef        = vm.columnDefs[colIdx]
         // Dropdown terbuka untuk sel ini
         let isDropdownOpen = vm.dropdownOpen && isSelected
+        let isOutputColumn = colDef.name == "Output"
         
         ZStack(alignment: .leading) {
+            
+            if isOutputColumn && vm.didCalculate {
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(Color.green.opacity(0.12))
+                    .padding(1)
+            }
+            
             if isSelected {
                 RoundedRectangle(cornerRadius: 3)
-                    .fill(Color.accentColor.opacity(0.15))
-                    .overlay(RoundedRectangle(cornerRadius: 3)
-                        .stroke(isDropdownOpen
-                                ? Color.accentColor
-                                : Color.accentColor, lineWidth: 1.5))
+                    .fill(
+                        isOutputColumn && vm.didCalculate
+                        ? Color.green.opacity(0.25)
+                        : Color.accentColor.opacity(0.15)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 3)
+                            .stroke(Color.accentColor, lineWidth: 1.5)
+                    )
                     .padding(1)
             }
             
@@ -451,7 +461,6 @@ struct ContentView: View {
                 inlineTextField(rowIdx: rowIdx, colIdx: colIdx, numberOnly: true, colDef: colDef)
                 
             case .dropdown(_):
-                // Tampil sebagai label + chevron (popup dikontrol sendiri)
                 dropdownStaticCell(rowIdx: rowIdx, colIdx: colIdx, value: value, colDef: colDef)
                 
             case .number(_, let maxVal):
@@ -487,32 +496,61 @@ struct ContentView: View {
             case .text:
                 if isEditingThis {
                     TextField("", text: $vm.editingText)
-                        .textFieldStyle(.plain).font(.system(size: 12))
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 12))
                         .padding(.horizontal, 10)
                         .frame(width: colDef.width, alignment: .leading)
                         .onSubmit { vm.commitEdit(); focus = .table }
                 } else {
-                    Text(value.isEmpty ? "–" : value)
-                        .font(.system(size: 12))
-                        .foregroundColor(value.isEmpty ? .secondary : .primary)
-                    //.frame(width: colDef.width, alignment: .leading)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                        .padding(.horizontal, 10).padding(.vertical, 7)
+                    if colDef.name == "Output" {
+                        // --- PERBAIKAN DI SINI ---
+                        if vm.didCalculate && !value.isEmpty {
+                            let income = cleanNumber(vm.rows[rowIdx].cells[1])
+                            let percent = Double(value) ?? 0
+                            
+                            let bonus = income * percent / 100
+                            let totalAmount = income + bonus
+                            
+                            Text("+\(String(format: "%.2f", percent))% (\(Int(totalAmount)))")
+                                .font(.system(size: 12))
+                                .foregroundColor(.primary)
+                                .lineLimit(1)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 7)
+                        } else {
+                            // Tampilkan strip atau kosong jika belum dikalkulasi
+                            Text("–")
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 7)
+                        }
+                        // --------------------------
+                    } else {
+                        Text(value.isEmpty ? "–" : value)
+                            .font(.system(size: 12))
+                            .foregroundColor(value.isEmpty ? .secondary : .primary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                    }
                 }
             }
         }
-        .frame(width: colDef.width, height: 32)// kalo ini dihapus widh di cell jadi normal, tapi jadi gak match width di column header dengan cell baris
-        .contentShape(Rectangle()) // Agar seluruh area sel bisa di-klik
+        .frame(width: colDef.width, height: 32)
+        .contentShape(Rectangle())
         .overlay(Rectangle().frame(width: 1)
-        .foregroundColor(Color(NSColor.separatorColor).opacity(0.5)), alignment: .trailing)
+            .foregroundColor(Color(NSColor.separatorColor).opacity(0.5)), alignment: .trailing)
         .anchorPreference(key: CellAnchorKey.self, value: .bounds) { anchor in
             (isSelected && vm.isDropdown(col: colIdx)) ? anchor : nil
         }
         .onTapGesture {
             if !vm.isEditable(col: colIdx) {
-                    return // 🚫 block total
-                }
-
+                return // 🚫 block total
+            }
+            
             if vm.isEditing { vm.commitEdit() }
             // Tutup dropdown lama jika ada
             if vm.dropdownOpen && !isSelected { vm.closeDropdown() }
@@ -528,18 +566,26 @@ struct ContentView: View {
             }
         }
     }
+    func cleanNumber(_ text: String) -> Double {
+        let cleaned = text
+            .replacingOccurrences(of: ".", with: "")
+            .replacingOccurrences(of: ",", with: "")
+            .filter { $0.isNumber }
+
+        return Double(cleaned) ?? 0
+    }
     
     // MARK: - Dropdown Static Cell (label saja, popup ditangani overlay)
     @ViewBuilder
     func dropdownStaticCell(rowIdx: Int, colIdx: Int, value: String, colDef: ColumnDef) -> some View {
         
         let displayValue: String = {
-                if colDef.name == "Position Level" {
-                    // Ambil label dari map berdasarkan angka yang tersimpan (value)
-                    return vm.levelReverseMap[value] ?? (value.isEmpty ? "Choose..." : value)
-                }
-                return value.isEmpty ? "Choose..." : value
-            }()
+            if colDef.name == "Position Level" {
+                // Ambil label dari map berdasarkan angka yang tersimpan (value)
+                return vm.levelReverseMap[value] ?? (value.isEmpty ? "Choose..." : value)
+            }
+            return value.isEmpty ? "Choose..." : value
+        }()
         
         HStack(spacing: 5) {
             dropdownDot(colIdx: colIdx, value: value)
@@ -718,8 +764,8 @@ struct ContentView: View {
                 let col = vm.selectedCol
                 
                 if !vm.isEditable(col: col) {
-                        return .handled
-                    }
+                    return .handled
+                }
                 
                 if vm.isDropdown(col: col) {
                     // Buka dropdown dengan keyboard
@@ -798,11 +844,14 @@ struct ContentView: View {
     }
 }
 
+
+
 // MARK: - Preview
 
 struct KeyboardNavigableTableView_Previews: PreviewProvider {
     static var previews: some View {
         ContentView()
-            //.frame(width: 1200, height: 440)
+        //.frame(width: 1200, height: 440)
     }
 }
+
