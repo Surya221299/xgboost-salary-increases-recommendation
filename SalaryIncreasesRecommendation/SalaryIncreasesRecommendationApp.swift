@@ -11,7 +11,7 @@ import SwiftUI
 struct SalaryIncreasesRecommendationApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            KeyboardNavigableTableView()
         }
     }
 }
