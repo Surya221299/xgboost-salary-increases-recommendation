@@ -8,9 +8,6 @@
 import SwiftUI
 import Combine
 
-import SwiftUI
-import Combine
-
 class TableViewModel: ObservableObject {
     @Published var rows: [TableRow]
     @Published var selectedRow: Int = 0

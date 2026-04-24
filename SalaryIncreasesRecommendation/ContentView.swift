@@ -1,6 +1,9 @@
 import SwiftUI
 import Combine
 import CoreML
+internal import UniformTypeIdentifiers
+
+// MARK: - Focus State
 
 struct CellAnchorKey: PreferenceKey {
     static var defaultValue: Anchor<CGRect>? = nil
@@ -130,6 +133,36 @@ struct DropdownRow: View {
 struct ContentView: View {
     @StateObject private var vm = TableViewModel()
     @FocusState private var focus: TableFocus?
+    
+    
+//    @State private var downloadState: DownloadState = .idle
+//    @State private var uploadState: UploadState = .idle
+//    @State private var uploadScale: CGFloat = 1.0
+    
+    // Ganti dengan ini:
+    @State private var downloadState: DownloadState = .idle
+    @State private var uploadState: UploadState = .idle
+
+    // Scale per-icon, bukan shared
+    @State private var downloadIconScale: CGFloat = 1.0
+    @State private var uploadIconScale: CGFloat = 1.0
+
+    // Opacity untuk crossfade antar icon
+    @State private var downloadIconOpacity: Double = 1.0
+    @State private var uploadIconOpacity: Double = 1.0
+    
+
+    enum UploadState {
+        case idle
+        case loading
+        case success
+    }
+
+    enum DownloadState {
+        case idle
+        case loading
+        case success
+    }
     
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -338,6 +371,50 @@ struct ContentView: View {
         .onTapGesture { /* dikonsumsi oleh DropdownRow, jangan hapus */ }
     }
     
+    var iconName: String {
+        switch downloadState {
+        case .idle:
+            return "square.and.arrow.down.fill"
+        case .loading:
+            return "square.and.arrow.down.badge.clock.fill"
+        case .success:
+            return "square.and.arrow.down.badge.checkmark.fill"
+        }
+    }
+
+    var iconColor: Color {
+        switch downloadState {
+        case .success:
+            return .green
+        case .loading:
+                return .yellow
+        default:
+            return .primary
+        }
+    }
+    
+    var uploadIconName: String {
+        switch uploadState {
+        case .idle:
+            return "square.and.arrow.up"
+        case .loading:
+            return "square.and.arrow.up.badge.clock"
+        case .success:
+            return "square.and.arrow.up.badge.checkmark.fill"
+        }
+    }
+
+    var uploadIconColor: Color {
+        switch uploadState {
+        case .idle:
+            return .primary
+        case .loading:
+            return .yellow
+        case .success:
+            return .green
+        }
+    }
+    
     // MARK: - Header Bar
     var headerBar: some View {
         HStack {
@@ -346,6 +423,95 @@ struct ContentView: View {
             Text("HR Data Input")
                 .font(.headline).fontWeight(.semibold)
             Spacer()
+
+            // --- Download Button ---
+            Button {
+                guard downloadState == .idle else { return }
+                animateBounceIcon(isDownload: true)
+                {
+                    downloadCSVTemplate()
+
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    ZStack {
+                        // IDLE icon
+                        Image(systemName: "square.and.arrow.down.fill")
+                            .scaleEffect(downloadState == .idle ? downloadIconScale : 0.01)
+                            .opacity(downloadState == .idle ? 1 : 0)
+
+                        // LOADING icon
+                        Image(systemName: "square.and.arrow.down.badge.clock.fill")
+                            .foregroundColor(.yellow)
+                            .scaleEffect(downloadState == .loading ? downloadIconScale : 0.01)
+                            .opacity(downloadState == .loading ? 1 : 0)
+
+                        // SUCCESS icon
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                            .scaleEffect(downloadState == .success ? downloadIconScale : 0.01)
+                            .opacity(downloadState == .success ? 1 : 0)
+                    }
+                    .frame(width: 20, height: 20)
+                    .animation(.spring(response: 0.35, dampingFraction: 0.5), value: downloadIconScale)
+                    .animation(.easeInOut(duration: 0.15), value: downloadState)
+
+                    Text("download_template.csv")
+                        .font(.body)
+                        .foregroundColor(
+                                downloadState == .success ? .green :
+                                downloadState == .loading ? .yellow :
+                                .primary
+                            )
+                }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .disabled(downloadState != .idle)
+
+            // --- Upload Button ---
+            Button {
+                guard uploadState == .idle else { return }
+                animateBounceIcon(isDownload: false) {
+                    importCSV()
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    ZStack {
+                        // IDLE icon
+                        Image(systemName: "square.and.arrow.up")
+                            .scaleEffect(uploadState == .idle ? uploadIconScale : 0.01)
+                            .opacity(uploadState == .idle ? 1 : 0)
+
+                        // LOADING icon
+                        Image(systemName: "square.and.arrow.up.badge.clock.fill")
+                            .foregroundColor(.yellow)
+                            .scaleEffect(uploadState == .loading ? uploadIconScale : 0.01)
+                            .opacity(uploadState == .loading ? 1 : 0)
+
+                        // SUCCESS icon
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                            .scaleEffect(uploadState == .success ? uploadIconScale : 0.01)
+                            .opacity(uploadState == .success ? 1 : 0)
+                    }
+                    .frame(width: 20, height: 20)
+                    .animation(.spring(response: 0.35, dampingFraction: 0.5), value: uploadIconScale)
+                    .animation(.easeInOut(duration: 0.15), value: uploadState)
+
+                    Text("Upload CSV")
+                        .font(.body)
+                        .foregroundColor(
+                                uploadState == .success ? .green :
+                                uploadState == .loading ? .yellow :
+                                .primary
+                            )
+                }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .disabled(uploadState != .idle)
+
             Button("Calculate") {
                 calculateAll()
             }
@@ -355,7 +521,7 @@ struct ContentView: View {
             .foregroundColor(.white)
             .disabled(!hasValidRow())
             .help("Isi minimal 1 baris lengkap untuk melakukan kalkulasi")
-            
+
             Text("\(vm.rowCount) baris · \(vm.colCount) kolom")
                 .font(.caption).foregroundColor(.secondary)
         }
@@ -369,6 +535,18 @@ struct ContentView: View {
     // MARK: - Column Header
     var columnHeader: some View {
         HStack(spacing: 0) {
+            
+            // --- Kolom nomor baris (header kosong) ---
+            Text("No")
+                .font(.headline).fontWeight(.bold)
+                .foregroundColor(.primary)
+                .frame(width: 36, alignment: .center)
+                .padding(.vertical, 8)
+                .background(Color(NSColor.controlBackgroundColor))
+                .overlay(Rectangle().frame(width: 1)
+                    .foregroundColor(Color(NSColor.separatorColor)), alignment: .trailing)
+                .overlay(Rectangle().frame(width: 1)
+                    .foregroundColor(Color(NSColor.separatorColor)), alignment: .leading)
             
             ForEach(Array(vm.columnDefs.enumerated()), id: \.offset) { colIdx, colDef in
                 HStack(spacing: 4) {
@@ -388,6 +566,198 @@ struct ContentView: View {
         }
         .overlay(Rectangle().frame(height: 1)
             .foregroundColor(Color(NSColor.separatorColor)), alignment: .bottom)
+        .overlay(Rectangle().frame(height: 1)
+            .foregroundColor(Color(NSColor.separatorColor)), alignment: .top)
+    }
+    
+    func animateBounceIcon(isDownload: Bool, action: @escaping () -> Bool) {
+        let setScale: (CGFloat) -> Void = { val in
+            if isDownload { downloadIconScale = val } else { uploadIconScale = val }
+        }
+        let setLoading = {
+            if isDownload { downloadState = .loading } else { uploadState = .loading }
+        }
+        let setSuccess = {
+            if isDownload { downloadState = .success } else { uploadState = .success }
+        }
+        let setIdle = {
+            if isDownload { downloadState = .idle } else { uploadState = .idle }
+        }
+
+        // Step 1: idle icon shrink
+        withAnimation(.easeIn(duration: 0.2)) {
+            setScale(0.01)
+        }
+
+        // Step 2: switch ke loading bounce, lalu langsung jalankan panel (di main thread)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+            setLoading()
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.45)) {
+                setScale(1.0)
+            }
+
+            // Sedikit delay agar loading icon sempat muncul sebelum panel muncul
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                let confirmed = action() // panel berjalan di sini, blocking sampai user konfirmasi/cancel
+
+                if confirmed {
+                    withAnimation(.easeIn(duration: 0.18)) { setScale(0.01) }
+
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                        setSuccess()
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.45)) {
+                            setScale(1.0)
+                        }
+                    }
+
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                        withAnimation(.easeIn(duration: 0.15)) { setScale(0.01) }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                            setIdle()
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
+                                setScale(1.0)
+                            }
+                        }
+                    }
+                } else {
+                    // Cancel → balik idle tanpa success
+                    withAnimation(.easeIn(duration: 0.15)) { setScale(0.01) }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        setIdle()
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
+                            setScale(1.0)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    func downloadCSVTemplate() -> Bool {
+        let csvString = """
+        Name,MonthlyRupiah,Performance,PositionLevel,YearsAtCompany,WorksOvertime
+        John Doe,5000000,High,Senior,3,Yes
+        Jane Smith,3500000,Medium,Junior,1,No
+        """
+        
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "template_hr_data.csv"
+        panel.allowedContentTypes = [.commaSeparatedText]
+        
+        guard panel.runModal() == .OK, let url = panel.url else {
+            return false // user cancel
+        }
+        try? csvString.write(to: url, atomically: true, encoding: .utf8)
+        return true
+    }
+    
+    func importCSV() -> Bool {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.commaSeparatedText]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        
+        guard panel.runModal() == .OK, let url = panel.url else {
+            return false // user cancel
+        }
+        guard let content = try? String(contentsOf: url, encoding: .utf8) else {
+            return false
+        }
+        
+        let parsed = parseCSV(content)
+        if !parsed.isEmpty {
+            vm.rows = parsed
+            vm.didCalculate = false
+            vm.selectedRow = 0
+            vm.selectedCol = 0
+        }
+        return true
+    }
+    
+    func parseCSV(_ content: String) -> [TableRow] {
+        // Normalize line endings
+        let lines = content
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        
+        guard lines.count > 1 else { return [] }
+        
+        // Skip header (baris pertama)
+        let dataLines = Array(lines.dropFirst())
+        
+        var result: [TableRow] = []
+        
+        for line in dataLines {
+            let cols = line.components(separatedBy: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            
+            guard cols.count >= 6 else { continue }
+            
+            // --- Kolom 0: Name ---
+            let name = cols[0]
+                .filter { $0.isLetter || $0.isWhitespace }
+                .capitalized
+            
+            // --- Kolom 1: MonthlyRupiah ---
+            let salary = cols[1].filter { $0.isNumber }
+            
+            // --- Kolom 2: Performance → simpan label asli (Low/Medium/High/VeryHigh) ---
+            let performance = normalizePerformance(cols[2])
+            
+            // --- Kolom 3: PositionLevel → simpan angka "1"-"5" ---
+            let positionLevel = normalizePositionLevel(cols[3])
+            
+            // --- Kolom 4: YearsAtCompany → validasi 0-40 ---
+            let years = normalizeYears(cols[4])
+            
+            // --- Kolom 5: WorksOvertime → "Yes" atau "No" ---
+            let overtime = normalizeOvertime(cols[5])
+            
+            // Output dikosongkan, akan diisi oleh calculateAll()
+            let cells = [name, salary, performance, positionLevel, years, overtime, ""]
+            result.append(TableRow(cells: cells))
+        }
+        
+        return result
+    }
+
+    // MARK: - Normalizer Helpers
+
+    func normalizePerformance(_ raw: String) -> String {
+        switch raw.lowercased().trimmingCharacters(in: .whitespaces) {
+        case "1", "low":      return "Low"
+        case "2", "medium":   return "Medium"
+        case "3", "high":     return "High"
+        case "4", "veryhigh", "very high": return "VeryHigh"
+        default:              return ""
+        }
+    }
+
+    func normalizePositionLevel(_ raw: String) -> String {
+        switch raw.lowercased().trimmingCharacters(in: .whitespaces) {
+        case "1", "junior":    return "1"
+        case "2", "middle":    return "2"
+        case "3", "senior":    return "3"
+        case "4", "manager":   return "4"
+        case "5", "executive": return "5"
+        default:               return ""
+        }
+    }
+
+    func normalizeYears(_ raw: String) -> String {
+        let digits = raw.filter { $0.isNumber }
+        guard let val = Int(digits), val >= 0, val <= 40 else { return "" }
+        return String(val)
+    }
+
+    func normalizeOvertime(_ raw: String) -> String {
+        switch raw.lowercased().trimmingCharacters(in: .whitespaces) {
+        case "1", "yes": return "Yes"
+        case "0", "no":  return "No"
+        default:         return ""
+        }
     }
     
     @ViewBuilder
@@ -412,6 +782,24 @@ struct ContentView: View {
     // MARK: - Row View
     func rowView(rowIdx: Int, row: TableRow) -> some View {
         HStack(spacing: 0) {
+            
+            // --- Nomor baris ---
+            Text("\(rowIdx + 1)")
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+                .frame(width: 36, height: 32, alignment: .center)
+                .background(
+                    rowIdx == vm.selectedRow
+                        ? Color.accentColor.opacity(0.08)
+                        : (rowIdx % 2 != 0
+                            ? Color(NSColor.windowBackgroundColor).opacity(0.6)
+                            : Color(NSColor.windowBackgroundColor))
+                )
+                .overlay(Rectangle().frame(width: 1)
+                    .foregroundColor(Color(NSColor.separatorColor).opacity(0.5)), alignment: .trailing)
+                .overlay(Rectangle().frame(width: 1)
+                    .foregroundColor(Color(NSColor.separatorColor).opacity(0.5)), alignment: .leading)
+            
             ForEach(Array(row.cells.enumerated()), id: \.offset) { colIdx, cell in
                 cellView(rowIdx: rowIdx, colIdx: colIdx, value: cell)
             }
@@ -422,7 +810,6 @@ struct ContentView: View {
             } else {
                 ZStack {
                     Color(NSColor.windowBackgroundColor)
-
                     if rowIdx % 2 != 0 {
                         Color.black.opacity(0.4)
                     }
@@ -822,14 +1209,8 @@ struct ContentView: View {
             let numberOnly = vm.isNumberOnly(col: col)
             if numberOnly && !char.allSatisfy({ $0.isNumber }) { return .ignored }
             
-            // Jangan langsung nimpa di sini jika TextField akan melakukan auto-select
-            // Atau set fokus dulu, baru isi datanya
             focus = .cell(row: row, col: col)
             
-            // Berikan sedikit delay agar TextField "matang" sebelum karakter dimasukkan
-//            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
-//                vm.rows[row].cells[col] = char
-//            }
             vm.rows[row].cells[col] = char
             vm.pendingChar = char
             return .handled
@@ -964,6 +1345,7 @@ struct InlineTextField: View {
         return formatter.string(from: NSNumber(value: number)) ?? digits
     }
 }
+
 
 // MARK: - Preview
 
