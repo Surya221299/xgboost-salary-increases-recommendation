@@ -103,8 +103,18 @@ class CSVViewModel: ObservableObject {
         let setScale: (CGFloat) -> Void = { val in
             if isDownload { self.downloadIconScale = val } else { self.uploadIconScale = val }
         }
-        let setLoading = { if isDownload { self.downloadState = .loading } else { self.uploadState = .loading } }
-        let setSuccess = { if isDownload { self.downloadState = .success } else { self.uploadState = .success } }
+        let setLoading = {
+            if isDownload {
+                self.downloadState = .loading
+            } else {
+                self.uploadState = .loading }
+        }
+        let setSuccess = {
+            if isDownload {
+                self.downloadState = .success
+            } else {
+                self.uploadState = .success
+            } }
         let setIdle    = { if isDownload { self.downloadState = .idle    } else { self.uploadState = .idle    } }
 
         // Step 1: idle icon shrink

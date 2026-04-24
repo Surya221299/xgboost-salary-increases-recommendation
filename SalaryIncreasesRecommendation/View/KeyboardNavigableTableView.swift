@@ -3,17 +3,23 @@ import Combine
 import CoreML
 
 // MARK: - KeyboardNavigableTableView
-
 struct KeyboardNavigableTableView: View {
-    @StateObject private var vm      = TableViewModel()
-    @StateObject private var csvVM   = CSVViewModel()
-    @FocusState  private var focus:    TableFocus?
-
+    @StateObject private var vm = TableViewModel()
+    @StateObject private var csvVM = CSVViewModel()
+    @FocusState  private var focus: TableFocus?
+    @State private var wave1Scale: CGFloat = 1.0
+    @State private var wave1Opacity: Double = 0.0
+    @State private var wave2Scale: CGFloat = 1.0
+    @State private var wave2Opacity: Double = 0.0
+    @State private var hasCalculated: Bool = false
+    
+    
     var body: some View {
         ZStack(alignment: .topLeading) {
             VStack(spacing: 0) {
+                
                 headerBar
-
+                
                 ScrollViewReader { proxy in
                     ScrollView([.horizontal, .vertical]) {
                         VStack(alignment: .leading, spacing: 0) {
@@ -32,7 +38,7 @@ struct KeyboardNavigableTableView: View {
                         }
                     }
                 }
-
+                
                 statusBar
             }
             .background(Color(NSColor.windowBackgroundColor))
@@ -41,13 +47,13 @@ struct KeyboardNavigableTableView: View {
             .onAppear { focus = .table }
             .onKeyPress(keys: [.upArrow, .downArrow, .leftArrow, .rightArrow,
                                .return, .escape, .tab]) { press in
-                guard focus == .table else { return .ignored }
-                return handleTableKey(press)
-            }
-            .onKeyPress(phases: .down) { press in
-                guard focus == .table else { return .ignored }
-                return handleTypingKey(press)
-            }
+                                   guard focus == .table else { return .ignored }
+                                   return handleTableKey(press)
+                               }
+                               .onKeyPress(phases: .down) { press in
+                                   guard focus == .table else { return .ignored }
+                                   return handleTypingKey(press)
+                               }
         }
         .onTapGesture {
             if vm.dropdownOpen { vm.closeDropdown(); focus = .table }
@@ -66,7 +72,7 @@ struct KeyboardNavigableTableView: View {
             dropdownOverlayView(anchor: anchor)
         }
     }
-
+    
     // MARK: - Add Row Button
     private var addRowButton: some View {
         HStack(spacing: 0) {
@@ -90,7 +96,7 @@ struct KeyboardNavigableTableView: View {
         }
         .background(Color(NSColor.controlBackgroundColor).opacity(0.4))
     }
-
+    
     // MARK: - Dropdown Overlay
     @ViewBuilder
     private func dropdownOverlayView(anchor: Anchor<CGRect>?) -> some View {
@@ -103,13 +109,13 @@ struct KeyboardNavigableTableView: View {
                 let currVal  = row < vm.rows.count ? vm.rows[row].cells[col] : ""
                 let popupW   = vm.columnDefs[col].width
                 let popupH   = min(CGFloat(opts.count) * 28 + 16, 208)
-
+                
                 DropdownPopup(
                     options: opts,
                     highlighted: $vm.dropdownHighlighted,
                     currentValue: currVal,
                     onSelect: { value in
-                        vm.selectDropdownValue(row: row, col: col, value: value)  // ← pakai fungsi baru
+                        vm.selectDropdownValue(row: row, col: col, value: value)
                         focus = .table
                     },
                     onDismiss: { vm.closeDropdown(); focus = .table }
@@ -124,7 +130,7 @@ struct KeyboardNavigableTableView: View {
             .zIndex(998)
         }
     }
-
+    
     // MARK: - Header Bar
     var headerBar: some View {
         HStack {
@@ -133,71 +139,102 @@ struct KeyboardNavigableTableView: View {
             Text("HR Data Input")
                 .font(.headline).fontWeight(.semibold)
             Spacer()
-
+            
             // Download Template
-            Button {
-                csvVM.triggerDownload()
-            } label: {
-                HStack(spacing: 6) {
-                    ZStack {
-                        iconLayer(name: "square.and.arrow.down.fill",            color: .primary, visible: csvVM.downloadState == .idle)
-                        iconLayer(name: "square.and.arrow.down.badge.clock.fill", color: .yellow,  visible: csvVM.downloadState == .loading)
-                        iconLayer(name: "checkmark.circle.fill",                 color: .green,   visible: csvVM.downloadState == .success)
+            HStack {
+                Button {
+                    csvVM.triggerDownload()
+                } label: {
+                    HStack(spacing: 6) {
+                        ZStack {
+                            iconLayer(name: "square.and.arrow.down.fill", color: .primary, visible: csvVM.downloadState == .idle)
+                            iconLayer(name: "square.and.arrow.down.badge.clock.fill", color: .yellow, visible: csvVM.downloadState == .loading)
+                            iconLayer(name: "checkmark.circle.fill", color: .green, visible: csvVM.downloadState == .success)
+                        }
+                        .frame(width: 20, height: 20)
+                        .scaleEffect(csvVM.downloadIconScale)
+                        .animation(.spring(response: 0.35, dampingFraction: 0.5), value: csvVM.downloadIconScale)
+                        .animation(.easeInOut(duration: 0.15), value: csvVM.downloadState)
+                        
+                        Text("Template CSV")
+                            .font(.body)
+                            .foregroundColor(csvVM.downloadLabelColor)
+                            .animation(.easeInOut(duration: 0.2), value: csvVM.downloadState)
                     }
-                    .frame(width: 20, height: 20)
-                    .scaleEffect(csvVM.downloadIconScale)
-                    .animation(.spring(response: 0.35, dampingFraction: 0.5), value: csvVM.downloadIconScale)
-                    .animation(.easeInOut(duration: 0.15), value: csvVM.downloadState)
-
-                    Text("Template CSV")
-                        .font(.body)
-                        .foregroundColor(csvVM.downloadLabelColor)
-                        .animation(.easeInOut(duration: 0.2), value: csvVM.downloadState)
                 }
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            .disabled(csvVM.downloadState != .idle)
-
-            // Upload CSV
-            Button {
-                csvVM.triggerUpload { parsed in
-                    vm.rows          = parsed
-                    vm.didCalculate  = false
-                    vm.selectedRow   = 0
-                    vm.selectedCol   = 0
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    ZStack {
-                        iconLayer(name: "square.and.arrow.up",                 color: .primary, visible: csvVM.uploadState == .idle)
-                        iconLayer(name: "square.and.arrow.up.badge.clock.fill",     color: .yellow,  visible: csvVM.uploadState == .loading)
-                        iconLayer(name: "checkmark.circle.fill",               color: .green,   visible: csvVM.uploadState == .success)
-                    }
-                    .frame(width: 20, height: 20)
-                    .scaleEffect(csvVM.uploadIconScale)
-                    .animation(.spring(response: 0.35, dampingFraction: 0.5), value: csvVM.uploadIconScale)
-                    .animation(.easeInOut(duration: 0.15), value: csvVM.uploadState)
-
-                    Text("Upload CSV")
-                        .font(.body)
-                        .foregroundColor(csvVM.uploadLabelColor)
-                        .animation(.easeInOut(duration: 0.2), value: csvVM.uploadState)
-                }
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            .disabled(csvVM.uploadState != .idle)
-
-            // Calculate
-            Button("Calculate") { vm.calculateAll() }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.bordered)
                 .controlSize(.large)
-                .tint(.blue)
-                .foregroundColor(.white)
-                .disabled(!vm.hasValidRow())
-                .help("Isi minimal 1 baris lengkap untuk melakukan kalkulasi")
-
+                .disabled(csvVM.downloadState != .idle)
+                
+                // Upload CSV
+                Button {
+                    csvVM.triggerUpload { parsed in
+                        vm.rows          = parsed
+                        vm.didCalculate  = false
+                        vm.selectedRow   = 0
+                        vm.selectedCol   = 0
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        ZStack {
+                            iconLayer(name: "square.and.arrow.up", color: .primary, visible: csvVM.uploadState == .idle)
+                            iconLayer(name: "square.and.arrow.up.badge.clock.fill", color: .yellow, visible: csvVM.uploadState == .loading)
+                            iconLayer(name: "checkmark.circle.fill", color: .green, visible: csvVM.uploadState == .success)
+                        }
+                        .frame(width: 20, height: 20)
+                        .scaleEffect(csvVM.uploadIconScale)
+                        .animation(.spring(response: 0.35, dampingFraction: 0.5), value: csvVM.uploadIconScale)
+                        .animation(.easeInOut(duration: 0.15), value: csvVM.uploadState)
+                        
+                        Text("Upload CSV")
+                            .font(.body)
+                            .foregroundColor(csvVM.uploadLabelColor)
+                            .animation(.easeInOut(duration: 0.2), value: csvVM.uploadState)
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .disabled(csvVM.uploadState != .idle)
+            }.padding(.trailing, 20)
+            
+            // Calculate
+            Button("Calculate") {
+                vm.calculateAll()
+                hasCalculated = true
+                stopPulse()
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .tint(.blue)
+            .foregroundColor(.white)
+            .disabled(!vm.hasValidRow())
+            .help("Isi minimal 1 baris lengkap untuk melakukan kalkulasi")
+            .background(
+                Group {
+                    if vm.hasValidRow() {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 20)
+                                .stroke(Color.blue, lineWidth: 1.5)
+                                .scaleEffect(wave1Scale)
+                                .opacity(wave1Opacity)
+                            
+                            RoundedRectangle(cornerRadius: 20)
+                                .stroke(Color.blue, lineWidth: 1.5)
+                                .scaleEffect(wave2Scale)
+                                .opacity(wave2Opacity)
+                        }
+                    }
+                }
+            )
+            .onAppear { startPulse() }
+            .onChange(of: vm.hasValidRow()) { isValid in
+                if isValid && !hasCalculated {
+                    startPulse()
+                } else {
+                    stopPulse()
+                }
+            }
+            
             Text("\(vm.rowCount) baris · \(vm.colCount) kolom")
                 .font(.caption).foregroundColor(.secondary)
         }
@@ -206,7 +243,49 @@ struct KeyboardNavigableTableView: View {
         .background(Color(NSColor.windowBackgroundColor))
         .overlay(Rectangle().frame(height: 1).foregroundColor(Color(NSColor.separatorColor)), alignment: .bottom)
     }
-
+    
+    func startPulse() {
+        // Kill dulu semua animasi yang berjalan
+        var killTransaction = Transaction()
+        killTransaction.disablesAnimations = true
+        withTransaction(killTransaction) {
+            wave1Scale   = 1.0
+            wave1Opacity = 0.0
+            wave2Scale   = 1.0
+            wave2Opacity = 0.0
+        }
+        
+        // Mulai wave 1 setelah reset bersih
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            wave1Opacity = 0.8
+            withAnimation(.easeOut(duration: 1.0).repeatForever(autoreverses: false)) {
+                wave1Scale   = 1.6
+                wave1Opacity = 0.0
+            }
+        }
+        
+        // Wave 2 dengan delay 0.5s
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+            wave2Opacity = 0.8
+            withAnimation(.easeOut(duration: 1.0).repeatForever(autoreverses: false)) {
+                wave2Scale   = 1.6
+                wave2Opacity = 0.0
+            }
+        }
+    }
+    
+    func stopPulse() {
+        // Kill semua animasi tanpa transisi
+        var t = Transaction()
+        t.disablesAnimations = true
+        withTransaction(t) {
+            wave1Scale   = 1.0
+            wave1Opacity = 0.0
+            wave2Scale   = 1.0
+            wave2Opacity = 0.0
+        }
+    }
+    
     /// Helper: single icon layer untuk ZStack crossfade
     @ViewBuilder
     private func iconLayer(name: String, color: Color, visible: Bool) -> some View {
@@ -215,22 +294,25 @@ struct KeyboardNavigableTableView: View {
             .scaleEffect(visible ? 1.0 : 0.01)
             .opacity(visible ? 1 : 0)
     }
-
+    
     // MARK: - Column Header
     var columnHeader: some View {
         HStack(spacing: 0) {
             // Row number header
             Text("No")
-                .font(.headline).fontWeight(.bold)
+                .font(.headline)
+                .fontWeight(.bold)
                 .foregroundColor(.secondary)
                 .frame(width: 36, alignment: .center)
                 .padding(.vertical, 8)
                 .background(Color(NSColor.windowBackgroundColor).overlay(Color.black.opacity(0.4)))
                 .overlay(Rectangle().frame(width: 1).foregroundColor(Color(NSColor.separatorColor)), alignment: .trailing)
-
+            
             ForEach(Array(vm.columnDefs.enumerated()), id: \.offset) { colIdx, colDef in
                 Text(colDef.name)
-                    .font(.headline).fontWeight(.bold).lineLimit(1)
+                    .font(.headline)
+                    .fontWeight(.bold)
+                    .lineLimit(1)
                     .foregroundColor(colIdx == vm.selectedCol ? .accentColor : .primary)
                     .frame(width: colDef.width, alignment: .center)
                     .padding(.vertical, 8)
@@ -243,7 +325,7 @@ struct KeyboardNavigableTableView: View {
         .overlay(Rectangle().frame(height: 1).foregroundColor(Color(NSColor.separatorColor)), alignment: .bottom)
         .overlay(Rectangle().frame(height: 1).foregroundColor(Color(NSColor.separatorColor)), alignment: .top)
     }
-
+    
     // MARK: - Row View
     func rowView(rowIdx: Int, row: TableRow) -> some View {
         HStack(spacing: 0) {
@@ -254,14 +336,14 @@ struct KeyboardNavigableTableView: View {
                 .frame(width: 36, height: 32, alignment: .center)
                 .background(
                     rowIdx == vm.selectedRow
-                        ? Color.accentColor.opacity(0.08)
-                        : (rowIdx % 2 != 0
-                            ? Color(NSColor.windowBackgroundColor).opacity(0.6)
-                            : Color(NSColor.windowBackgroundColor))
+                    ? Color.accentColor.opacity(0.08)
+                    : (rowIdx % 2 != 0
+                       ? Color(NSColor.windowBackgroundColor).opacity(0.6)
+                       : Color(NSColor.windowBackgroundColor))
                 )
                 .overlay(Rectangle().frame(width: 1).foregroundColor(Color(NSColor.separatorColor).opacity(0.5)), alignment: .trailing)
                 .overlay(Rectangle().frame(width: 1).foregroundColor(Color(NSColor.separatorColor).opacity(0.5)), alignment: .leading)
-
+            
             ForEach(Array(row.cells.enumerated()), id: \.offset) { colIdx, cell in
                 cellView(rowIdx: rowIdx, colIdx: colIdx, value: cell)
             }
@@ -278,7 +360,7 @@ struct KeyboardNavigableTableView: View {
         }
         .overlay(Rectangle().frame(height: 1).foregroundColor(Color(NSColor.separatorColor).opacity(0.5)), alignment: .bottom)
     }
-
+    
     // MARK: - Cell View
     @ViewBuilder
     func cellView(rowIdx: Int, colIdx: Int, value: String) -> some View {
@@ -287,7 +369,7 @@ struct KeyboardNavigableTableView: View {
         let colDef         = vm.columnDefs[colIdx]
         let isOutputColumn = colDef.name == "Salary increases"
         let isValidOutput  = vm.didCalculate && !value.isEmpty && value != "0"
-
+        
         ZStack(alignment: .leading) {
             if isOutputColumn && isValidOutput {
                 RoundedRectangle(cornerRadius: 3).fill(Color.green.opacity(0.12)).padding(1)
@@ -298,20 +380,20 @@ struct KeyboardNavigableTableView: View {
                     .overlay(RoundedRectangle(cornerRadius: 3).stroke(Color.accentColor, lineWidth: 1.5))
                     .padding(1)
             }
-
+            
             switch colDef.type {
             case .textField:
                 InlineTextField(rowIdx: rowIdx, colIdx: colIdx, numberOnly: false, colDef: colDef, vm: vm, focus: $focus)
-
+                
             case .numberField:
                 InlineTextField(rowIdx: rowIdx, colIdx: colIdx, numberOnly: true, colDef: colDef, vm: vm, focus: $focus)
-
+                
             case .dropdown(_):
                 dropdownStaticCell(rowIdx: rowIdx, colIdx: colIdx, value: value, colDef: colDef)
-
+                
             case .number(_, let maxVal):
                 numberBarCell(value: value, maxVal: maxVal, colDef: colDef, isEditingThis: isEditingThis)
-
+                
             case .text:
                 textCell(rowIdx: rowIdx, colIdx: colIdx, value: value, colDef: colDef, isEditingThis: isEditingThis)
             }
@@ -324,7 +406,7 @@ struct KeyboardNavigableTableView: View {
         }
         .onTapGesture { handleCellTap(rowIdx: rowIdx, colIdx: colIdx, isSelected: isSelected) }
     }
-
+    
     private func handleCellTap(rowIdx: Int, colIdx: Int, isSelected: Bool) {
         guard vm.isEditable(col: colIdx) else { return }
         if vm.isEditing { vm.commitEdit() }
@@ -339,14 +421,14 @@ struct KeyboardNavigableTableView: View {
             focus = .table
         }
     }
-
+    
     // MARK: - Cell Sub-views
-
     @ViewBuilder
     private func numberBarCell(value: String, maxVal: Int, colDef: ColumnDef, isEditingThis: Bool) -> some View {
         if isEditingThis {
             TextField("", text: $vm.editingText)
-                .textFieldStyle(.plain).font(.system(size: 12))
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
                 .padding(.horizontal, 10)
                 .frame(width: colDef.width, alignment: .leading)
                 .onSubmit { vm.commitEdit(); focus = .table }
@@ -371,7 +453,7 @@ struct KeyboardNavigableTableView: View {
             .padding(.horizontal, 10).padding(.vertical, 7)
         }
     }
-
+    
     @ViewBuilder
     private func textCell(rowIdx: Int, colIdx: Int, value: String, colDef: ColumnDef, isEditingThis: Bool) -> some View {
         if isEditingThis {
@@ -380,7 +462,7 @@ struct KeyboardNavigableTableView: View {
                 .padding(.horizontal, 10)
                 .frame(width: colDef.width, alignment: .leading)
                 .onSubmit { vm.commitEdit(); focus = .table }
-        } else if colDef.name == "Output" {
+        } else if colDef.name == "Salary increases" {
             outputCell(rowIdx: rowIdx, value: value, colDef: colDef)
         } else {
             Text(value.isEmpty ? "–" : value)
@@ -390,7 +472,7 @@ struct KeyboardNavigableTableView: View {
                 .padding(.horizontal, 10).padding(.vertical, 7)
         }
     }
-
+    
     @ViewBuilder
     private func outputCell(rowIdx: Int, value: String, colDef: ColumnDef) -> some View {
         if vm.didCalculate && !value.isEmpty && value != "0" {
@@ -399,12 +481,13 @@ struct KeyboardNavigableTableView: View {
             let bonus   = income * percent / 100
             let total   = income + bonus
             Text("+\(String(format: "%.2f", percent))% (Rp.\(Int(total)))")
-                .font(.system(size: 12)).foregroundColor(.primary).lineLimit(1)
+                .font(.system(size: 12)).foregroundColor(.green).lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 10).padding(.vertical, 7)
         } else if vm.didCalculate && value == "0" {
             Text("-")
-                .font(.system(size: 12)).foregroundColor(.secondary)
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 10).padding(.vertical, 7)
         } else {
@@ -414,7 +497,7 @@ struct KeyboardNavigableTableView: View {
                 .padding(.horizontal, 10).padding(.vertical, 7)
         }
     }
-
+    
     @ViewBuilder
     func dropdownStaticCell(rowIdx: Int, colIdx: Int, value: String, colDef: ColumnDef) -> some View {
         let displayValue: String = {
@@ -423,7 +506,7 @@ struct KeyboardNavigableTableView: View {
             }
             return value.isEmpty ? "Choose..." : value
         }()
-
+        
         HStack(spacing: 5) {
             dropdownDot(colIdx: colIdx, value: value)
             Text(displayValue)
@@ -441,7 +524,7 @@ struct KeyboardNavigableTableView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .padding(.horizontal, 10).padding(.vertical, 7)
     }
-
+    
     @ViewBuilder
     func dropdownDot(colIdx: Int, value: String) -> some View {
         let colName = vm.columnDefs[colIdx].name
@@ -458,12 +541,12 @@ struct KeyboardNavigableTableView: View {
                 .background(Circle().fill(Color.accentColor))
         }
     }
-
+    
     // MARK: - Status Bar
     var statusBar: some View {
         let inCell:     Bool = { if case .cell = focus { return true }; return false }()
         let inDropdown: Bool = vm.dropdownOpen
-
+        
         return HStack {
             Image(systemName: "keyboard").font(.caption2).foregroundColor(.secondary)
             Group {
@@ -477,22 +560,32 @@ struct KeyboardNavigableTableView: View {
             }
             .font(.caption2).foregroundColor(.secondary)
             Spacer()
-            Text("Sel: \(vm.columns[vm.selectedCol]) – Baris \(vm.selectedRow + 1)")
+            Text("Cell: \(vm.columns[vm.selectedCol]) – Baris \(vm.selectedRow + 1)")
                 .font(.caption2).fontWeight(.medium).foregroundColor(.accentColor)
         }
         .padding(.horizontal, 16).padding(.vertical, 6)
         .background(Color(NSColor.controlBackgroundColor))
         .overlay(Rectangle().frame(height: 1).foregroundColor(Color(NSColor.separatorColor)), alignment: .top)
     }
-
+    
     // MARK: - Helpers
     func cleanNumber(_ text: String) -> Double {
         Double(text.replacingOccurrences(of: ".", with: "")
-                   .replacingOccurrences(of: ",", with: "")
-                   .filter { $0.isNumber }) ?? 0
+            .replacingOccurrences(of: ",", with: "")
+            .filter { $0.isNumber }) ?? 0
     }
-
+    
     // MARK: - Key Handlers
+    func handleDropdownKey(_ press: KeyPress) -> KeyPress.Result {
+        switch press.key {
+        case .upArrow:       vm.dropdownMoveUp();                         return .handled
+        case .downArrow:     vm.dropdownMoveDown(col: vm.selectedCol);    return .handled
+        case .return:        vm.confirmDropdown(); focus = .table;        return .handled
+        case .escape, .tab:  vm.closeDropdown();   focus = .table;        return .handled
+        default:             return .ignored
+        }
+    }
+    
     func handleTableKey(_ press: KeyPress) -> KeyPress.Result {
         if vm.dropdownOpen { return handleDropdownKey(press) }
         if vm.isEditing {
@@ -523,30 +616,20 @@ struct KeyboardNavigableTableView: View {
             }
         }
     }
-
-    func handleDropdownKey(_ press: KeyPress) -> KeyPress.Result {
-        switch press.key {
-        case .upArrow:       vm.dropdownMoveUp();                         return .handled
-        case .downArrow:     vm.dropdownMoveDown(col: vm.selectedCol);    return .handled
-        case .return:        vm.confirmDropdown(); focus = .table;        return .handled
-        case .escape, .tab:  vm.closeDropdown();   focus = .table;        return .handled
-        default:             return .ignored
-        }
-    }
-
+    
     func handleTypingKey(_ press: KeyPress) -> KeyPress.Result {
         if vm.dropdownOpen { return .ignored }
         let col = vm.selectedCol
         let row = vm.selectedRow
-
+        
         let nav: Set<KeyEquivalent> = [.upArrow,.downArrow,.leftArrow,.rightArrow,.return,.escape,.tab,.delete,.deleteForward]
         if nav.contains(press.key) { return .ignored }
-
+        
         let char = String(press.key.character)
         guard char.unicodeScalars.first.map({ $0.value >= 32 && $0.value != 127 }) == true,
               !char.isEmpty else { return .ignored }
         guard vm.isEditable(col: col), !vm.isDropdown(col: col) else { return .ignored }
-
+        
         if vm.isInlineField(col: col) {
             if vm.isNumberOnly(col: col) && !char.allSatisfy({ $0.isNumber }) { return .ignored }
             focus = .cell(row: row, col: col)

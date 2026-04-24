@@ -3,10 +3,11 @@ import SwiftUI
 // MARK: - InlineTextField
 
 struct InlineTextField: View {
-    let rowIdx:     Int
-    let colIdx:     Int
+    let rowIdx: Int
+    let colIdx: Int
     let numberOnly: Bool
-    let colDef:     ColumnDef
+    let colDef: ColumnDef
+    
     @ObservedObject var vm: TableViewModel
     @FocusState.Binding var focus: TableFocus?
 

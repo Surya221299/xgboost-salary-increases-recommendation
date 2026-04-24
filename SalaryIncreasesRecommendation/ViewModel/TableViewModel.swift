@@ -36,13 +36,13 @@ class TableViewModel: ObservableObject {
 
     // MARK: - Column Definitions
     let columnDefs: [ColumnDef] = [
-        ColumnDef(name: "Name",             type: .textField,                                width: 160),
-        ColumnDef(name: "Monthly Rupiah",   type: .numberField,                              width: 130),
+        ColumnDef(name: "Name",             type: .textField,                                    width: 160),
+        ColumnDef(name: "Monthly Rupiah",   type: .numberField,                                  width: 130),
         ColumnDef(name: "Performace",       type: .dropdown(["Low","Medium","High","VeryHigh"]), width: 140),
         ColumnDef(name: "Position Level",   type: .dropdown(["Junior","Middle","Senior","Manager","Executive"]), width: 120),
-        ColumnDef(name: "Years At Company", type: .dropdown((0...40).map { String($0) }),    width: 140),
-        ColumnDef(name: "Works Overtime",   type: .dropdown(["Yes","No"]),                   width: 130),
-        ColumnDef(name: "Salary increases",           type: .text,  width: 180, isEditable: false),
+        ColumnDef(name: "Years At Company", type: .dropdown((0...40).map { String($0) }),        width: 140),
+        ColumnDef(name: "Works Overtime",   type: .dropdown(["Yes","No"]),                       width: 130),
+        ColumnDef(name: "Salary increases", type: .text,                                         width: 180, isEditable: false),
     ]
 
     var columns:  [String] { columnDefs.map { $0.name } }
@@ -55,13 +55,23 @@ class TableViewModel: ObservableObject {
     }
 
     // MARK: - Navigation
-    func moveUp()    { if selectedRow > 0          { selectedRow -= 1 } }
-    func moveDown()  { if selectedRow < rowCount-1 { selectedRow += 1 } }
+    func moveUp() {
+        if selectedRow > 0 {
+            selectedRow -= 1
+        }
+    }
+    func moveDown() {
+        if selectedRow < rowCount-1 {
+            selectedRow += 1 }
+    }
 
     func moveLeft() {
         var prev = selectedCol - 1
         while prev >= 0 {
-            if isEditable(col: prev) { selectedCol = prev; return }
+            if isEditable(col: prev) {
+                selectedCol = prev;
+                return
+            }
             prev -= 1
         }
     }
@@ -69,7 +79,10 @@ class TableViewModel: ObservableObject {
     func moveRight() {
         var next = selectedCol + 1
         while next < colCount {
-            if isEditable(col: next) { selectedCol = next; return }
+            if isEditable(col: next) {
+                selectedCol = next;
+                return
+            }
             next += 1
         }
     }
@@ -157,13 +170,17 @@ class TableViewModel: ObservableObject {
         dropdownOpen = false
     }
 
-    func dropdownMoveUp()           { if dropdownHighlighted > 0 { dropdownHighlighted -= 1 } }
+    func dropdownMoveUp() {
+        if dropdownHighlighted > 0 {
+            dropdownHighlighted -= 1
+        }
+    }
     func dropdownMoveDown(col: Int) {
         let count = dropdownOptions(col: col).count
-        if dropdownHighlighted < count - 1 { dropdownHighlighted += 1 }
+        if dropdownHighlighted < count - 1 {
+            dropdownHighlighted += 1
+        }
     }
-    
-    
 
     // MARK: - ML Prediction
     func calculateAll() {
