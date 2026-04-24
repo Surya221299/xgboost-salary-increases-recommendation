@@ -2,8 +2,6 @@ import SwiftUI
 import Combine
 import CoreML
 
-// MARK: - Focus State
-
 struct CellAnchorKey: PreferenceKey {
     static var defaultValue: Anchor<CGRect>? = nil
     static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
@@ -398,14 +396,14 @@ struct ContentView: View {
         case .dropdown:
             EmptyView()
         case .number:
-            Image(systemName: "numbers")
-                .font(.system(size: 8)).foregroundColor(.secondary.opacity(0.6))
+            EmptyView()
+
         case .numberField:
-            Image(systemName: "numbers")
-                .font(.system(size: 8)).foregroundColor(.blue.opacity(0.7))
+            EmptyView()
+
         case .textField:
-            Image(systemName: "person.fill")
-                .font(.system(size: 8)).foregroundColor(.blue.opacity(0.7))
+            EmptyView()
+
         case .text:
             EmptyView()
         }
@@ -539,7 +537,7 @@ struct ContentView: View {
                             let bonus = income * percent / 100
                             let totalAmount = income + bonus
                             
-                            Text("+\(String(format: "%.2f", percent))% (\(Int(totalAmount)))")
+                            Text("+\(String(format: "%.2f", percent))% (Rp.\(Int(totalAmount)))")
                                 .font(.system(size: 12))
                                 .foregroundColor(.primary)
                                 .lineLimit(1)
@@ -665,83 +663,28 @@ struct ContentView: View {
     // MARK: - Inline TextField
     @ViewBuilder
     func inlineTextField(rowIdx: Int, colIdx: Int, numberOnly: Bool, colDef: ColumnDef) -> some View {
-        let binding = Binding<String>(
-            get: {
-                let rawValue = vm.rows[rowIdx].cells[colIdx]
-                // Jika kolom angka dan tidak kosong, beri format titik (IDR)
-                if numberOnly && !rawValue.isEmpty {
-                    return formatToIDR(rawValue)
-                }
-                return rawValue
-            },
-            set: { newVal in
-                var processedValue = newVal
-                
-                if numberOnly {
-                    let cleanNumber = newVal.filter { $0.isNumber }
-                    processedValue = cleanNumber
-                } else if colDef.name.lowercased().contains("name") || colDef.name == "EmployeeName" {
-                    // Logika Kapitalisasi: Mengubah "surya ramadhani" -> "Surya Ramadhani"
-                    processedValue = newVal.filter { $0.isLetter || $0.isWhitespace }
-                    processedValue = processedValue.capitalized
-                }
-                
-                vm.rows[rowIdx].cells[colIdx] = processedValue
-            }
-        )
         
-        TextField(numberOnly ? "0" : "", text: binding)
-            .textFieldStyle(.plain)
-            .font(.system(size: 12))
-            .foregroundColor(.primary)
-            .padding(.horizontal, 10).padding(.vertical, 7)
-            .frame(width: colDef.width, alignment: .leading)
-            .focused($focus, equals: .cell(row: rowIdx, col: colIdx))
-            .onSubmit {
-                vm.selectedRow = rowIdx
-                vm.selectedCol = colIdx
-                vm.moveDown()
-                focus = vm.isInlineField(col: vm.selectedCol)
-                ? .cell(row: vm.selectedRow, col: vm.selectedCol)
-                : .table
-            }
-            .onKeyPress(keys: [.upArrow, .downArrow, .leftArrow, .rightArrow]) { press in
-                vm.selectedRow = rowIdx
-                vm.selectedCol = colIdx
-                switch press.key {
-                case .upArrow:    vm.moveUp()
-                case .downArrow:  vm.moveDown()
-                case .leftArrow:  vm.moveLeft()
-                case .rightArrow: vm.moveRight()
-                default: break
-                }
-                focus = vm.isInlineField(col: vm.selectedCol)
-                ? .cell(row: vm.selectedRow, col: vm.selectedCol)
-                : .table
-                return .handled
-            }
-            .onKeyPress(.escape) {
-                vm.selectedRow = rowIdx
-                vm.selectedCol = colIdx
-                focus = .table
-                return .handled
-            }
-            .onKeyPress(.tab) {
-                vm.selectedRow = rowIdx
-                vm.selectedCol = colIdx
-                vm.moveRight()
-                focus = vm.isInlineField(col: vm.selectedCol)
-                ? .cell(row: vm.selectedRow, col: vm.selectedCol)
-                : .table
-                return .handled
-            }
+        InlineTextField(
+            rowIdx: rowIdx,
+            colIdx: colIdx,
+            numberOnly: numberOnly,
+            colDef: colDef,
+            vm: vm,
+            focus: $focus
+        )
     }
     // MARK: - Helper Formatting
     func formatToIDR(_ string: String) -> String {
-        guard let number = Int(string) else { return string }
+        // Pastikan hanya digit yang masuk formatter
+        let digitsOnly = string.filter { $0.isNumber }
+        guard !digitsOnly.isEmpty, let number = Int(digitsOnly) else { return string }
+        
         let formatter = NumberFormatter()
-        formatter.groupingSeparator = "."
         formatter.numberStyle = .decimal
+        formatter.groupingSeparator = "."
+        formatter.groupingSize = 3
+        formatter.usesGroupingSeparator = true
+        
         return formatter.string(from: NSNumber(value: number)) ?? string
     }
     
@@ -884,9 +827,11 @@ struct ContentView: View {
             focus = .cell(row: row, col: col)
             
             // Berikan sedikit delay agar TextField "matang" sebelum karakter dimasukkan
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
-                vm.rows[row].cells[col] = char
-            }
+//            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+//                vm.rows[row].cells[col] = char
+//            }
+            vm.rows[row].cells[col] = char
+            vm.pendingChar = char
             return .handled
         } else {
             vm.editingText = char
@@ -896,7 +841,129 @@ struct ContentView: View {
     }
 }
 
+struct InlineTextField: View {
+    let rowIdx: Int
+    let colIdx: Int
+    let numberOnly: Bool
+    let colDef: ColumnDef
+    @ObservedObject var vm: TableViewModel
+    @FocusState.Binding var focus: TableFocus?
 
+    // Local display text — ini yang ditampilkan di TextField
+    @State private var displayText: String = ""
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if numberOnly {
+                Text("Rp.")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+            }
+
+            TextField(numberOnly ? "0" : "", text: $displayText)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+                .foregroundColor(.primary)
+                // Format REALTIME setiap karakter berubah
+                .onChange(of: displayText) { newVal in
+                    if numberOnly {
+                        let digits = newVal.filter { $0.isNumber }
+                        // Update model dengan angka bersih
+                        vm.rows[rowIdx].cells[colIdx] = digits
+                        // Format display string dengan titik pemisah
+                        let formatted = formatIDR(digits)
+                        // Hanya update jika berbeda, hindari loop
+                        if formatted != newVal {
+                            displayText = formatted
+                        }
+                    } else {
+                        var processed = newVal
+                        if colDef.name.lowercased().contains("name") || colDef.name == "EmployeeName" {
+                            processed = newVal.filter { $0.isLetter || $0.isWhitespace }
+                            processed = processed.capitalized
+                        }
+                        vm.rows[rowIdx].cells[colIdx] = processed
+                        if processed != newVal {
+                            displayText = processed
+                        }
+                    }
+                }
+                // Sync dari model ke display saat pertama muncul / focus kembali
+                .onAppear {
+                    let raw = vm.rows[rowIdx].cells[colIdx]
+                    displayText = numberOnly ? formatIDR(raw) : raw
+                }
+                .onChange(of: vm.pendingChar) { char in
+                    guard let char = char,
+                          vm.isSelected(row: rowIdx, col: colIdx) else { return }
+                    // Sync displayText dengan nilai terbaru dari model
+                    let raw = vm.rows[rowIdx].cells[colIdx]
+                    displayText = numberOnly ? formatIDR(raw) : raw
+                    vm.pendingChar = nil // reset flag
+                }
+                .focused($focus, equals: .cell(row: rowIdx, col: colIdx))
+                .onChange(of: focus) { newFocus in
+                    // Hanya sync jika focus MASUK ke cell ini (bukan keluar)
+                    guard newFocus == .cell(row: rowIdx, col: colIdx) else { return }
+                    // Jika ada pendingChar, jangan overwrite — biarkan onChange(pendingChar) yang handle
+                    guard vm.pendingChar == nil else { return }
+                    let raw = vm.rows[rowIdx].cells[colIdx]
+                    displayText = numberOnly ? formatIDR(raw) : raw
+                }
+                .onSubmit {
+                    vm.selectedRow = rowIdx
+                    vm.selectedCol = colIdx
+                    vm.moveDown()
+                    focus = vm.isInlineField(col: vm.selectedCol)
+                        ? .cell(row: vm.selectedRow, col: vm.selectedCol)
+                        : .table
+                }
+                .onKeyPress(keys: [.upArrow, .downArrow, .leftArrow, .rightArrow]) { press in
+                    vm.selectedRow = rowIdx
+                    vm.selectedCol = colIdx
+                    switch press.key {
+                    case .upArrow:   vm.moveUp()
+                    case .downArrow: vm.moveDown()
+                    case .leftArrow: vm.moveLeft()
+                    case .rightArrow: vm.moveRight()
+                    default: break
+                    }
+                    focus = vm.isInlineField(col: vm.selectedCol)
+                        ? .cell(row: vm.selectedRow, col: vm.selectedCol)
+                        : .table
+                    return .handled
+                }
+                .onKeyPress(.escape) {
+                    vm.selectedRow = rowIdx
+                    vm.selectedCol = colIdx
+                    focus = .table
+                    return .handled
+                }
+                .onKeyPress(.tab) {
+                    vm.selectedRow = rowIdx
+                    vm.selectedCol = colIdx
+                    vm.moveRight()
+                    focus = vm.isInlineField(col: vm.selectedCol)
+                        ? .cell(row: vm.selectedRow, col: vm.selectedCol)
+                        : .table
+                    return .handled
+                }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .frame(width: colDef.width, alignment: .leading)
+    }
+
+    func formatIDR(_ digits: String) -> String {
+        guard !digits.isEmpty, let number = Int(digits) else { return digits }
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.groupingSeparator = "."
+        formatter.groupingSize = 3
+        formatter.usesGroupingSeparator = true
+        return formatter.string(from: NSNumber(value: number)) ?? digits
+    }
+}
 
 // MARK: - Preview
 

@@ -8,6 +8,9 @@
 import SwiftUI
 import Combine
 
+import SwiftUI
+import Combine
+
 class TableViewModel: ObservableObject {
     @Published var rows: [TableRow]
     @Published var selectedRow: Int = 0
@@ -15,6 +18,7 @@ class TableViewModel: ObservableObject {
     @Published var isEditing: Bool = false
     @Published var editingText: String = ""
     @Published var didCalculate: Bool = false
+    @Published var pendingChar: String? = nil
 
     // Dropdown state
     @Published var dropdownOpen: Bool = false
