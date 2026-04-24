@@ -28,8 +28,7 @@ class TableViewModel: ObservableObject {
         "Manager": "4",
         "Executive": "5"
     ]
-
-    // Kebalikannya untuk menampilkan teks dari angka yang tersimpan
+    
     var levelReverseMap: [String: String] {
         Dictionary(uniqueKeysWithValues: levelMap.map { ($1, $0) })
     }
@@ -38,7 +37,7 @@ class TableViewModel: ObservableObject {
         ColumnDef(name: "Name",
                   type: .textField,
                   width: 160),
-        ColumnDef(name: "Monthly Income",
+        ColumnDef(name: "Monthly Rupiah",
                   type: .numberField,
                   width: 130),
         ColumnDef(name: "Performace",
@@ -55,7 +54,7 @@ class TableViewModel: ObservableObject {
                   width: 130),
         ColumnDef(name: "Output",
                   type: .text,
-                  width: 150,
+                  width: 180,
                   isEditable: false),
     ]
 

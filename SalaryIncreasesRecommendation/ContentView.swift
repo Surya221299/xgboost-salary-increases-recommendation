@@ -175,11 +175,7 @@ struct ContentView: View {
                 }
                 
                 statusBar
-                Button("Calculate") {
-                    calculateAll()
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                
             }
             .background(Color(NSColor.windowBackgroundColor))
             .focusable()
@@ -258,9 +254,16 @@ struct ContentView: View {
     
     func calculateAll() {
         for i in 0..<vm.rows.count {
-            let result = predictRow(vm.rows[i])
-            vm.rows[i].cells[6] = result // kolom Output
+            let row = vm.rows[i]
+            
+            if isRowComplete(row) {
+                let result = predictRow(row)
+                vm.rows[i].cells[6] = result
+            } else {
+                vm.rows[i].cells[6] = "0"
+            }
         }
+        
         vm.didCalculate = true
     }
     
@@ -274,21 +277,21 @@ struct ContentView: View {
                 "No": 0, "Yes": 1
             ]
             
-            let Monthly_Income = Double(row.cells[1]) ?? 0
+            let Monthly_Rupiah = Double(row.cells[1]) ?? 0
             let Performance = involvementMap[row.cells[2]] ?? 0
             let Position_Level = Double(row.cells[3]) ?? 0
             let Years_At_Company = Double(row.cells[4]) ?? 0
             let Works_Overtime = overtimeMap[row.cells[5]] ?? 0
             
-            let input = salary_hike_v1Input(
-                Monthly_Income: Monthly_Income,
+            let input = salary_hike_v2Input(
+                Monthly_Rupiah: Monthly_Rupiah,
                 Performance: Performance,
                 Position_Level: Position_Level,
                 Years_At_Company: Years_At_Company,
                 Works_Overtime: Works_Overtime
             )
             
-            let model = try salary_hike_v1(configuration: MLModelConfiguration())
+            let model = try salary_hike_v2(configuration: MLModelConfiguration())
             let prediction = try model.prediction(input: input)
             
             return String(format: "%.2f", prediction.target)
@@ -345,10 +348,21 @@ struct ContentView: View {
             Text("HR Data Input")
                 .font(.headline).fontWeight(.semibold)
             Spacer()
+            Button("Calculate") {
+                calculateAll()
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .tint(.blue)
+            .foregroundColor(.white)
+            .disabled(!hasValidRow())
+            .help("Isi minimal 1 baris lengkap untuk melakukan kalkulasi")
+            
             Text("\(vm.rowCount) baris · \(vm.colCount) kolom")
                 .font(.caption).foregroundColor(.secondary)
         }
-        .padding(.horizontal, 16).padding(.vertical, 10)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
         .background(Color(NSColor.windowBackgroundColor))
         .overlay(Rectangle().frame(height: 1)
             .foregroundColor(Color(NSColor.separatorColor)), alignment: .bottom)
@@ -420,20 +434,34 @@ struct ContentView: View {
         .overlay(Rectangle().frame(height: 1)
             .foregroundColor(Color(NSColor.separatorColor).opacity(0.5)), alignment: .bottom)
     }
-    
+    func hasValidRow() -> Bool {
+        return vm.rows.contains { row in
+            // semua kolom (kecuali Output) harus terisi
+            for (index, value) in row.cells.enumerated() {
+                let colName = vm.columnDefs[index].name
+                if colName == "Output" { continue }
+                if value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    return false
+                }
+            }
+            return true
+        }
+    }
     // MARK: - Cell View
     @ViewBuilder
     func cellView(rowIdx: Int, colIdx: Int, value: String) -> some View {
         let isSelected    = vm.isSelected(row: rowIdx, col: colIdx)
         let isEditingThis = isSelected && vm.isEditing
         let colDef        = vm.columnDefs[colIdx]
-        // Dropdown terbuka untuk sel ini
         let isDropdownOpen = vm.dropdownOpen && isSelected
         let isOutputColumn = colDef.name == "Output"
         
         ZStack(alignment: .leading) {
             
-            if isOutputColumn && vm.didCalculate {
+            let isValidOutput = vm.didCalculate && !value.isEmpty && value != "0"
+
+            
+            if isOutputColumn && isValidOutput {
                 RoundedRectangle(cornerRadius: 3)
                     .fill(Color.green.opacity(0.12))
                     .padding(1)
@@ -504,7 +532,7 @@ struct ContentView: View {
                 } else {
                     if colDef.name == "Output" {
                         // --- PERBAIKAN DI SINI ---
-                        if vm.didCalculate && !value.isEmpty {
+                        if vm.didCalculate && !value.isEmpty && value != "0" {
                             let income = cleanNumber(vm.rows[rowIdx].cells[1])
                             let percent = Double(value) ?? 0
                             
@@ -518,7 +546,18 @@ struct ContentView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 7)
-                        } else {
+                        }
+                        
+                        else if vm.didCalculate && value == "0" {
+                            Text("-")
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 7)
+                        }
+                        
+                        else {
                             // Tampilkan strip atau kosong jika belum dikalkulasi
                             Text("–")
                                 .font(.system(size: 12))
@@ -604,10 +643,23 @@ struct ContentView: View {
                     : Color.secondary.opacity(0.7)
                 )
         }
-        //.frame(width: colDef.width)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
+    }
+    
+    func isRowComplete(_ row: TableRow) -> Bool {
+        for (index, value) in row.cells.enumerated() {
+            let colName = vm.columnDefs[index].name
+            
+            // skip kolom Output
+            if colName == "Output" { continue }
+            
+            if value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return false
+            }
+        }
+        return true
     }
     
     // MARK: - Inline TextField
@@ -854,4 +906,3 @@ struct KeyboardNavigableTableView_Previews: PreviewProvider {
         //.frame(width: 1200, height: 440)
     }
 }
-
