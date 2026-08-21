@@ -1,0 +1,25 @@
+{
+  "version": "1.0",
+  "features": {
+    "PerformanceRating": {
+      "min": 3.0,
+      "max": 4.0
+    },
+    "JobInvolvement": {
+      "min": 1.0,
+      "max": 4.0
+    },
+    "JobLevel": {
+      "min": 1.0,
+      "max": 5.0
+    },
+    "YearsAtCompany": {
+      "min": 0.0,
+      "max": 40.0
+    },
+    "OverTime": {
+      "min": 0.0,
+      "max": 1.0
+    }
+  }
+}
