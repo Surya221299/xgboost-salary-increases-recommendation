@@ -1,54 +1,54 @@
 # Salary Increases Recommendation
 
-Aplikasi desktop macOS berbasis SwiftUI untuk memprediksi rekomendasi persentase kenaikan gaji karyawan secara offline menggunakan model Machine Learning on-device (Core ML).
+A macOS desktop application built with SwiftUI to predict employee salary increase recommendations offline using an on-device Machine Learning model (Core ML).
 
-## Fitur Utama
+## Features
 
-- **Keyboard-Navigable Table**: Input data interaktif bergaya spreadsheet dengan dukungan navigasi tombol panah, dropdown popup, dan inline editing.
-- **Bulk CSV Import & Template**: Fitur unduh template CSV serta import data batch dengan validasi dan normalisasi otomatis.
-- **On-Device Core ML Inference**: Prediksi kenaikan gaji dihitung secara lokal tanpa ketergantungan koneksi internet.
-- **End-to-End ML Pipeline**: Dokumentasi dan script pelatihan model menggunakan Python (XGBoost, hyperparameter tuning Optuna, dan konversi ke Core ML).
+- **Keyboard-Navigable Table**: Interactive spreadsheet-style table supporting arrow-key navigation, dropdown popups, and inline editing.
+- **Bulk CSV Import & Template**: Built-in CSV template download and batch data import with automatic validation and normalization.
+- **On-Device Core ML Inference**: Local salary increase predictions calculated with low latency and without network dependencies.
+- **End-to-End ML Pipeline**: Complete model training workflow in Python (XGBoost, Optuna hyperparameter tuning, and export to Core ML).
 
 ## Tech Stack
 
-| Komponen | Teknologi |
+| Component | Technology |
 | :--- | :--- |
-| **Aplikasi Desktop** | macOS, SwiftUI, Combine, AppKit |
-| **Model On-Device** | Apple Core ML (`salary_hike_v2.mlmodel`) |
-| **Pipeline ML** | Python 3, XGBoost, Optuna, Scikit-Learn, Coremltools |
+| **Desktop Application** | macOS, SwiftUI, Combine, AppKit |
+| **On-Device Model** | Apple Core ML (`salary_hike_v2.mlmodel`) |
+| **ML Training Pipeline** | Python 3, XGBoost, Optuna, Scikit-Learn, Coremltools |
 
-## Parameter Input Model
+## Model Features & Target
 
-| Parameter | Tipe Data | Keterangan / Nilai |
+| Feature | Data Type | Description / Values |
 | :--- | :--- | :--- |
-| `Monthly Rupiah` | Numeric | Gaji pokok per bulan (IDR) |
+| `Monthly Rupiah` | Numeric | Monthly base salary (IDR) |
 | `Performance` | Categorical | `Low` (1), `Medium` (2), `High` (3), `VeryHigh` (4) |
 | `Position Level` | Categorical | `Junior` (1), `Middle` (2), `Senior` (3), `Manager` (4), `Executive` (5) |
-| `Years At Company` | Numeric | Masa kerja dalam tahun (0 - 40) |
+| `Years At Company` | Numeric | Company tenure in years (0 - 40) |
 | `Works Overtime` | Binary | `Yes` (1), `No` (0) |
-| **Target Output** | Numeric | Rekomendasi persentase kenaikan gaji (%) |
+| **Target Output** | Numeric | Recommended salary increase percentage (%) |
 
-## Panduan Menjalankan
+## Getting Started
 
-### Menjalankan Aplikasi macOS
-1. Buka project menggunakan Xcode:
+### Running the macOS App
+1. Open the project in Xcode:
    ```bash
    open SalaryIncreasesRecommendation.xcodeproj
    ```
-2. Pilih skema target `SalaryIncreasesRecommendation` dengan destination **My Mac**.
-3. Jalankan aplikasi dengan menekan `Cmd + R`.
+2. Select the `SalaryIncreasesRecommendation` target scheme with **My Mac** as the destination.
+3. Press `Cmd + R` to build and run.
 
-### Melatih Ulang Model ML (Opsional)
-1. Install dependensi Python:
+### Retraining the ML Model (Optional)
+1. Install Python dependencies:
    ```bash
    pip install -r requirements.txt
    ```
-2. Buka dan jalankan Jupyter Notebook:
+2. Launch the Jupyter Notebook pipeline:
    ```bash
    jupyter notebook machine-learning-pipeline/employee-compensation-optimation.ipynb
    ```
 
-## Struktur Direktori
+## Directory Structure
 
 ```text
 .
