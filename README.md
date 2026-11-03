@@ -2,6 +2,8 @@
 
 A macOS desktop application built with SwiftUI to predict employee salary increase recommendations offline using an on-device Machine Learning model (Core ML).
 
+![Application Screenshot](Screenshot.png)
+
 ## Features
 
 - **Keyboard-Navigable Table**: Interactive spreadsheet-style table supporting arrow-key navigation, dropdown popups, and inline editing.
